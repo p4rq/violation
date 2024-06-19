@@ -63,6 +63,7 @@
 </template>
 
 <script>
+//q
 import axios from 'axios';
 import ViolationItem from './ViolationItem.vue';
 
