@@ -8,11 +8,20 @@
     "devDependencies": {
         "@popperjs/core": "^2.11.6",
         "@vitejs/plugin-vue": "^4.5.0",
+        "autoprefixer": "^10.4.19",
         "axios": "^1.6.4",
         "bootstrap": "^5.2.3",
         "laravel-vite-plugin": "^1.0",
+        "postcss": "^8.4.38",
         "sass": "^1.56.1",
+        "tailwindcss": "^3.4.4",
         "vite": "^5.0",
         "vue": "^3.2.37"
+    },
+    "dependencies": {
+        "@inertiajs/inertia": "^0.11.1",
+        "@inertiajs/inertia-vue3": "^0.6.0",
+        "bootstrap-icons": "^1.11.3",
+        "sweetalert2": "^11.12.0"
     }
 }
