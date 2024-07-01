@@ -1,8 +1,9 @@
 <template>
     <div class="container mt-2" @click="handleClickOutside">
+        <!-- Toolbar for Search, Filter, and Sort -->
         <div class="toolbar mb-2 d-flex align-items-center justify-content-between">
             <div class="input-group me-2">
-                <input type="text" v-model="searchQuery" @input="searchViolations" placeholder="Поиск..." class="form-control form-control-sm" />
+                <input type="text" v-model="searchQuery" @input="applyFilters" placeholder="Поиск..." class="form-control form-control-sm" />
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
             </div>
 
@@ -46,6 +47,7 @@
             </div>
         </div>
 
+        <!-- List of Violations -->
         <div class="row">
             <div class="col-6 tree-panel">
                 <div class="tree">
@@ -54,8 +56,8 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <button class="tree-button root-button" @click="addParentViolation">
                                     Root
-                                    <span @click="toggleSubViolations(null)" v-if="isExpanded(null)">&#9660;</span>
-                                    <span @click="toggleSubViolations(null)" v-else>&#9658;</span>
+                                    <span @click.stop="toggleSubViolations(null)" v-if="isExpanded(null)">&#9660;</span>
+                                    <span @click.stop="toggleSubViolations(null)" v-else>&#9658;</span>
                                 </button>
                             </div>
                             <ul v-if="isExpanded(null)" class="list-group mt-1">
@@ -74,6 +76,31 @@
                         </li>
                     </ul>
                 </div>
+                <nav aria-label="Page navigation">
+                    <ul class="pagination">
+                        <!-- First Page -->
+                        <li class="page-item" :class="{ disabled: pagination.current_page === 1 }">
+                            <a class="page-link" @click="goToPage(1)" href="javascript:void(0)">First</a>
+                        </li>
+                        <!-- Previous Page -->
+                        <li class="page-item" :class="{ disabled: pagination.current_page === 1 }">
+                            <a class="page-link" @click="goToPage(pagination.current_page - 1)" href="javascript:void(0)">Previous</a>
+                        </li>
+                        <!-- Page Numbers -->
+                        <li class="page-item" v-for="page in pagesToShow" :key="page" :class="{ active: page === pagination.current_page }">
+                            <a class="page-link" @click="goToPage(page)" href="javascript:void(0)">{{ page }}</a>
+                        </li>
+                        <!-- Next Page -->
+                        <li class="page-item" :class="{ disabled: pagination.current_page === pagination.last_page }">
+                            <a class="page-link" @click="goToPage(pagination.current_page + 1)" href="javascript:void(0)">Next</a>
+                        </li>
+                        <!-- Last Page -->
+                        <li class="page-item" :class="{ disabled: pagination.current_page === pagination.last_page }">
+                            <a class="page-link" @click="goToPage(pagination.last_page)" href="javascript:void(0)">Last</a>
+                        </li>
+                    </ul>
+                </nav>
+
             </div>
 
             <div class="col-6 edit-panel" v-if="selectedViolation || creatingNewViolation">
@@ -109,9 +136,6 @@
     </div>
 </template>
 
-
-
-
 <script>
 import axios from 'axios';
 import Swal from 'sweetalert2';
@@ -123,6 +147,12 @@ export default {
     data() {
         return {
             violations: [],
+            pagination: {
+                current_page: 1,
+                last_page: 1,
+                per_page: 40,
+                total: 0,
+            },
             searchQuery: '',
             filter: {
                 isActive: '',
@@ -147,60 +177,122 @@ export default {
         filteredAndSortedViolations() {
             let violations = this.violations.filter(v => v.parent_id === null);
 
-            if (this.searchQuery) {
-                violations = violations.filter(violation =>
-                    violation.name.toLowerCase().includes(this.searchQuery.toLowerCase())
-                );
-            }
-
-            if (this.filter.isActive) {
-                violations = violations.filter(violation =>
-                    String(violation.is_active) === this.filter.isActive
-                );
-            }
-
-            if (this.filter.isSelectable) {
-                violations = violations.filter(violation =>
-                    String(violation.is_selectable) === this.filter.isSelectable
-                );
-            }
-
-            if (this.sortOption === 'name_asc') {
-                violations.sort((a, b) => a.name.localeCompare(b.name));
-            } else if (this.sortOption === 'name_desc') {
-                violations.sort((a, b) => b.name.localeCompare(a.name));
-            } else if (this.sortOption === 'children_count_asc') {
-                violations.sort((a, b) => this.getChildrenCount(a.id) - this.getChildrenCount(b.id));
-            } else if (this.sortOption === 'children_count_desc') {
-                violations.sort((a, b) => this.getChildrenCount(b.id) - this.getChildrenCount(a.id));
+            switch (this.sortOption) {
+                case 'name_asc':
+                    violations.sort((a, b) => a.name.localeCompare(b.name));
+                    break;
+                case 'name_desc':
+                    violations.sort((a, b) => b.name.localeCompare(a.name));
+                    break;
+                case 'children_count_asc':
+                    violations.sort((a, b) => this.getChildrenCount(a.id) - this.getChildrenCount(b.id));
+                    break;
+                case 'children_count_desc':
+                    violations.sort((a, b) => this.getChildrenCount(b.id) - this.getChildrenCount(a.id));
+                    break;
             }
 
             return violations;
+        },
+        pagesToShow() {
+            let pages = [];
+            const range = 2; // number of pages to show around current page
+
+            let start = this.pagination.current_page - range;
+            let end = this.pagination.current_page + range;
+
+            // Ensure start and end are within bounds
+            if (start < 1) {
+                start = 1;
+                end = Math.min(start + range * 2, this.pagination.last_page);
+            }
+            if (end > this.pagination.last_page) {
+                end = this.pagination.last_page;
+                start = Math.max(end - range * 2, 1);
+            }
+
+            for (let i = start; i <= end; i++) {
+                pages.push(i);
+            }
+            return pages;
         }
     },
+    mounted() {
+        this.fetchViolations();
+    },
     methods: {
-        async getViolations() {
-            try {
-                const response = await axios.get('http://localhost:8000/violations');
-                this.violations = response.data;
-            } catch (error) {
-                console.error('Error fetching violations:', error);
+        fetchViolations() {
+            const params = {
+                page: this.pagination.current_page,
+                per_page: this.pagination.per_page,
+                search: this.searchQuery,
+                sort: this.sortOption,
+                filter_active: this.filter.isActive,
+                filter_selectable: this.filter.isSelectable,
+            };
+
+            axios.get('/violations', { params })
+                .then(response => {
+                    this.violations = response.data.data;
+                    this.pagination.current_page = response.data.current_page;
+                    this.pagination.last_page = response.data.last_page;
+                    this.pagination.total = response.data.total;
+                })
+                .catch(error => {
+                    console.error(error);
+                });
+        },
+        fetchChildren(violationId) {
+            console.log(`Fetching children for violation ID: ${violationId}`);
+            axios.get(`/violations?parent_id=${violationId}`)
+                .then(response => {
+                    console.log('Fetched children:', response.data.data);
+                    const children = response.data.data;
+                    if (children.length > 0) {
+                        this.addUniqueViolations(children);
+                    } else {
+                        console.log('No children found for this parent.');
+                    }
+                })
+                .catch(error => {
+                    console.error(error);
+                });
+        },
+        addUniqueViolations(newViolations) {
+            console.log('Adding unique violations:', newViolations);
+            newViolations.forEach(newViolation => {
+                if (!this.violations.some(v => v.id === newViolation.id)) {
+                    this.violations.push(newViolation);
+                }
+            });
+            console.log('Updated violations:', this.violations);
+        },
+        goToPage(page) {
+            if (page >= 1 && page <= this.pagination.last_page) {
+                this.pagination.current_page = page;
+                this.fetchViolations();
             }
         },
-        getChildrenCount(parentId) {
-            return this.violations.filter(v => v.parent_id === parentId).length;
+        applyFilters() {
+            this.pagination.current_page = 1;
+            this.fetchViolations();
         },
-        toggleSubViolations(violationId) {
-            this.expandedViolations = this.isExpanded(violationId)
-                ? this.expandedViolations.filter(id => id !== violationId)
-                : [...this.expandedViolations, violationId];
+        toggleSortDropdown() {
+            this.showSortDropdown = !this.showSortDropdown;
+            this.showFilterDropdown = false;
         },
-        isExpanded(violationId) {
-            return this.expandedViolations.includes(violationId);
+        toggleFilterDropdown() {
+            this.showFilterDropdown = !this.showFilterDropdown;
+            this.showSortDropdown = false;
+        },
+        setSortOption(option) {
+            this.sortOption = option;
+            this.applyFilters();
+            this.showSortDropdown = false;
         },
         addParentViolation() {
-            this.creatingNewViolation = true;
             this.selectedViolation = null;
+            this.creatingNewViolation = true;
             this.currentViolation = {
                 name: '',
                 is_active: false,
@@ -209,19 +301,31 @@ export default {
             };
         },
         startEditViolation(violation) {
-            this.creatingNewViolation = false;
             this.selectedViolation = violation;
+            this.creatingNewViolation = false;
             this.currentViolation = { ...violation };
         },
         startAddChildViolation(parentViolation) {
             this.creatingNewViolation = true;
-            this.selectedViolation = parentViolation;
             this.currentViolation = {
                 name: '',
                 is_active: false,
                 is_selectable: false,
                 parent_id: parentViolation.id,
             };
+        },
+        saveViolation() {
+            const saveAction = this.creatingNewViolation ? axios.post : axios.put;
+            const url = this.creatingNewViolation ? '/violations' : `/violations/${this.currentViolation.id}`;
+
+            saveAction(url, this.currentViolation)
+                .then(() => {
+                    this.fetchViolations();
+                    this.cancelEdit();
+                })
+                .catch(error => {
+                    console.error(error);
+                });
         },
         cancelEdit() {
             this.selectedViolation = null;
@@ -233,81 +337,57 @@ export default {
                 parent_id: null,
             };
         },
-        async saveViolation() {
-            if (this.creatingNewViolation) {
-                await this.addViolation();
-            } else {
-                await this.updateViolation();
-            }
-        },
-        async addViolation() {
-            try {
-                const response = await axios.post('http://localhost:8000/violations', this.currentViolation);
-                this.violations.push(response.data);
-                this.cancelEdit();
-            } catch (error) {
-                console.error('Error adding violation:', error);
-            }
-        },
-        async updateViolation() {
-            try {
-                await axios.put(`http://localhost:8000/violations/${this.currentViolation.id}`, this.currentViolation);
-                const index = this.violations.findIndex(v => v.id === this.currentViolation.id);
-                this.$set(this.violations, index, { ...this.currentViolation });
-                this.cancelEdit();
-            } catch (error) {
-                console.error('Error updating violation:', error);
-            }
-        },
-        async confirmDeleteViolation(violation) {
-            const result = await Swal.fire({
+        confirmDeleteViolation(violation) {
+            Swal.fire({
                 title: 'Вы уверены?',
-                text: 'Вы не сможете восстановить это!',
+                text: "Это действие нельзя будет отменить!",
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Да, удалить это!',
-                cancelButtonText: 'Отмена',
+                confirmButtonText: 'Да, удалить!',
+                cancelButtonText: 'Отменить'
+            }).then(result => {
+                if (result.isConfirmed) {
+                    this.deleteViolation(violation);
+                }
             });
-
-            if (result.isConfirmed) {
-                this.deleteViolation(violation);
+        },
+        deleteViolation(violation) {
+            axios.delete(`/violations/${violation.id}`)
+                .then(() => {
+                    this.fetchViolations();
+                    this.cancelEdit();
+                })
+                .catch(error => {
+                    console.error(error);
+                });
+        },
+        toggleSubViolations(violationId) {
+            const index = this.expandedViolations.indexOf(violationId);
+            if (index === -1) {
+                this.expandedViolations.push(violationId);
+                this.fetchChildren(violationId);
+            } else {
+                this.expandedViolations.splice(index, 1);
             }
         },
-        async deleteViolation(violation) {
-            try {
-                await axios.delete(`http://localhost:8000/violations/${violation.id}`);
-                this.violations = this.violations.filter(v => v.id !== violation.id);
-                this.cancelEdit();
-                Swal.fire('Удалено!', 'Ваш элемент был удален.', 'success');
-            } catch (error) {
-                console.error('Error deleting violation:', error);
-            }
+        isExpanded(violationId) {
+            return this.expandedViolations.includes(violationId);
         },
-        toggleSortDropdown() {
-            this.showSortDropdown = !this.showSortDropdown;
-        },
-        toggleFilterDropdown() {
-            this.showFilterDropdown = !this.showFilterDropdown;
-        },
-        setSortOption(option) {
-            this.sortOption = option;
-            this.showSortDropdown = false;
-        },
-        applyFilters() {
-            this.showFilterDropdown = false;
+        getChildrenCount(violationId) {
+            return this.violations.filter(v => v.parent_id === violationId).length;
         },
         handleClickOutside(event) {
-            if (this.$refs.sortDropdown && !this.$refs.sortDropdown.contains(event.target)) {
+            if (!this.$refs.sortDropdown.contains(event.target)) {
                 this.showSortDropdown = false;
             }
-            if (this.$refs.filterDropdown && !this.$refs.filterDropdown.contains(event.target)) {
+            if (!this.$refs.filterDropdown.contains(event.target)) {
                 this.showFilterDropdown = false;
             }
         },
     },
-    mounted() {
-        this.getViolations();
-    }
+    beforeDestroy() {
+        document.removeEventListener('click', this.handleClickOutside);
+    },
 };
 </script>
 
